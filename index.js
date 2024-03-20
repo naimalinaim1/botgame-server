@@ -135,22 +135,36 @@ async function run() {
     // update user
     app.patch("/users/:userId", async (req, res) => {
       const userId = req.params.userId;
-      const update = req.body;
-
+      const updates = req.body;
+    
+      // Ensure that we don't unintentionally overwrite the increment logic
+      // by removing the points update from the incoming update payload,
+      // in case it was included.
+      const { points, ...safeUpdates } = updates;
+    
       try {
         const filter = { userId };
-        const doc = {
-          $set: {
-            ...update,
-          },
+    
+        const updateDoc = {
+          ...(Object.keys(safeUpdates).length > 0 && {
+            $set: safeUpdates,
+          }),
+          $inc: { points }, // Increment points by 1
         };
-        const result = await usersColl.updateOne(filter, doc);
+    
+        const result = await usersColl.updateOne(filter, updateDoc);
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "User not found" });
+        }
+    
         res.send(result);
       } catch (error) {
-        console.error("Error fetching top ranking users:", error);
+        console.error("Error updating user:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
